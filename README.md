@@ -1,0 +1,1 @@
+`logical_ecl_file_converter` - tool allows converting from/to ECL file format which is used in Logical game.
