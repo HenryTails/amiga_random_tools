@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import argparse
+# import pwn
 import struct
 from PIL import Image
 
@@ -85,6 +86,10 @@ def ecl_to_png():
                 exit(1)
         ecl_uncompressed_data.append(output_buffer)
 
+        # for stream comparison and debugging
+        # print(len(output_buffer))
+        # print(pwn.hexdump(output_buffer))
+
     palette = amiga_rgb_to_pc_rgb(ecl_rgb_values) + make_ehb_palette(amiga_rgb_to_pc_rgb(ecl_rgb_values))
 
     img = Image.frombytes('P', (image_x, image_y), planar_to_chunky(image_x, image_y, ecl_uncompressed_data))
@@ -123,10 +128,6 @@ def compress_amiga_bitplane(one_bitplane):
     compressed_bitplane += struct.pack('>H', image_skip_first_lines * (image_x // 8) | 0x0000)
     one_bitplane = one_bitplane[image_skip_first_lines * (image_x // 8):]
 
-    # last 9 bytes should be removed - we might overwrite important structs, triggers on 'stein.ecl'
-
-    one_bitplane = one_bitplane[:-9]
-
     # we have to compress 'one_bitplane' using repeated 0x00 or 0xff
 
     while len(one_bitplane) != 0:
@@ -134,12 +135,16 @@ def compress_amiga_bitplane(one_bitplane):
             for find_end in range(len(one_bitplane)):
                 if one_bitplane[find_end] != 0:
                     break
+                else:
+                    find_end += 1
             compressed_bitplane += struct.pack('>H', find_end | 0x0000)
             one_bitplane = one_bitplane[find_end:]
         elif one_bitplane[0:4] == b'\xff' * 4:
             for find_end in range(len(one_bitplane)):
                 if one_bitplane[find_end] != 0xff:
                     break
+                else:
+                    find_end += 1
             compressed_bitplane += struct.pack('>H', find_end | 0xc000)
             one_bitplane = one_bitplane[find_end:]
         else:
