@@ -10,7 +10,7 @@ def planar_to_chunky(x, y, bitplanes):
     bytes_to_process = y * (x // 8)
     image_data = bytearray([0] * (x * y))
     for bitplane_index in range(len(bitplanes)):
-        assert len(bitplanes[bitplane_index]) >= bytes_to_process, 'bitplane data too short'
+        assert len(bitplanes[bitplane_index]) >= bytes_to_process, f'bitplane data too short ({len(bitplanes[bitplane_index])} < {bytes_to_process})'
         for one_pixel in range(len(image_data)):
             if (bitplanes[bitplane_index][one_pixel // 8] >> (7 - (one_pixel % 8) )) & 1 == 1:
                 image_data[one_pixel] += 2 ** bitplane_index
@@ -122,40 +122,47 @@ def chunky_to_planar(chunky_data):
 def compress_amiga_bitplane(one_bitplane):
 
     compressed_bitplane = bytes()
+    group_size = 4
 
-    # first 'image_skip_first_lines' should be ignored (for tilesets)
+    # first 'image_skip_first_lines' should be ignored (for tilesets) - cleaning bitplane
+    # don't use on 'Pdata.ecl' and 'Titel.ecl'
 
-    compressed_bitplane += struct.pack('>H', image_skip_first_lines * (image_x // 8) | 0x0000)
-    one_bitplane = one_bitplane[image_skip_first_lines * (image_x // 8):]
+    one_bitplane = b'\x00' * (image_skip_first_lines * (image_x // 8)) + one_bitplane[image_skip_first_lines * (image_x // 8):]
+
+    # to better match game files but create wrong size bitplanes
+    # one_bitplane += b'\x00'
 
     # we have to compress 'one_bitplane' using repeated 0x00 or 0xff
 
     while len(one_bitplane) != 0:
-        if one_bitplane[0:4] == b'\x00' * 4:
+        if one_bitplane[0:group_size] == b'\x00' * group_size:
             for find_end in range(len(one_bitplane)):
                 if one_bitplane[find_end] != 0:
                     break
-                else:
-                    find_end += 1
+            else:
+                find_end = len(one_bitplane)
             compressed_bitplane += struct.pack('>H', find_end | 0x0000)
             one_bitplane = one_bitplane[find_end:]
-        elif one_bitplane[0:4] == b'\xff' * 4:
+        elif one_bitplane[0:group_size] == b'\xff' * group_size:
             for find_end in range(len(one_bitplane)):
                 if one_bitplane[find_end] != 0xff:
                     break
-                else:
-                    find_end += 1
+            else:
+                find_end = len(one_bitplane)
             compressed_bitplane += struct.pack('>H', find_end | 0xc000)
             one_bitplane = one_bitplane[find_end:]
         else:
-            for find_end in range(len(one_bitplane) - 4):
-                if one_bitplane[find_end: find_end + 4] == b'\x00' * 4 or one_bitplane[find_end: find_end + 4] == b'\xff' * 4:
+            for find_end in range(len(one_bitplane) - group_size):
+                if one_bitplane[find_end: find_end + group_size] == b'\x00' * group_size or one_bitplane[find_end: find_end + group_size] == b'\xff' * group_size:
                     break
             else:
                 find_end = len(one_bitplane)
             compressed_bitplane += struct.pack('>H', find_end | 0x4000)
             compressed_bitplane += one_bitplane[:find_end]
             one_bitplane = one_bitplane[find_end:]
+
+    # print(pwn.hexdump(compressed_bitplane))
+
     return compressed_bitplane
 
 def png_to_ecl():
